@@ -1,3 +1,4 @@
+#pragma once
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
@@ -10,12 +11,14 @@
 #include <sys/shm.h>
 
 //======= begin DEFINES =======================
+#define bool ushort
+#define true 1
+#define false 0
 #define KEYSALT 6532
 #define MAX_MSG_SZ 256
 #define MSQ_PERMS 0666
 #define SHMPERMS 0666
 #define SEMPERMS 0666
-
 //======= e n d DEFINES =======================
 
 //======= begin msq functions =================
@@ -107,12 +110,12 @@ msg_t recieveMessage(int msgq_id, long typ) {
  * @return shmid of the requested key
  * @note Exits on failure in case of creation
  */
-int getShmID(key_t key, int create) {
-    int shm_id = shmget(key, sizeof(int), SHMPERMS | create);
+int getShmID(key_t key, size_t size, int create) {
+    int shm_id = shmget(key, size, SHMPERMS | create);
     if (shm_id == -1) {
         if (create) {
             perror("Error in starting shared memory initialization");
-            exit(-1);
+            raise(SIGINT);
         }
         return -1;
     }
@@ -126,8 +129,13 @@ int getShmID(key_t key, int create) {
  * @param shmid shmid to be attached to
  * @return shmaddr at the beginning of the shm block
  */
-int* getShmAddr(int shmid) {
-    return (int*) shmat(shmid, (void*) 0, 0);
+void* getShmAddr(int shmid) {
+    int* shm_addr = shmat(shmid, (void*) 0, 0);
+    if (shm_addr == (void *) -1) {
+        perror("Can't get shm addr");
+        raise(SIGINT);
+    }
+    return shm_addr;
 }
 
 /**
@@ -136,11 +144,26 @@ int* getShmAddr(int shmid) {
  * @param shm_addr shmaddr to be released
  * @note Exits on filure !
  */
-void releaseShmAddr(int* shm_addr) {
+void releaseShmAddr(void* shm_addr) {
     if(shmdt(shm_addr) == -1) {
         perror("Error in shmdt");
         exit(-1);
     }
+}
+
+/**
+ * @brief Get number of attached processes to a shared memory segment
+ * 
+ * @param shmid ID of shared memory segment
+ * @return number of attached processes
+ */
+int getShmAttachesCount(int shmid) {
+    struct shmid_ds buf;
+    if (shmctl(shmid, IPC_STAT, &buf) == -1) {
+        perror("Can't get nattaches");
+        raise(SIGINT);
+    }
+    return buf.shm_nattch;
 }
 
 /**

@@ -18,7 +18,7 @@ int main(int argc, char const *argv[])
         down(buf_sem_id);
         if (!isBufEmpty()) {
             int x = consume();
-            printf("I'm consuming %d\n", x);
+            if (x != -1) printf("I'm consuming %d\n", x);
         } else {
             printf("Buffer is empty\n");
         }

@@ -1,3 +1,11 @@
+/**
+ * @file lib.h
+ * @author Ebrahim Gomaa (ebrahim.gomaa.hg@gmail.com)
+ * @brief IPC Library
+ * @version 0.1
+ * @date 2021-01-14
+ * 
+ */
 #pragma once
 #include <stdlib.h>
 #include <string.h>
@@ -43,7 +51,7 @@ int getMsqID(int key, int create) {
         char errtxt[256];
         sprintf(errtxt, "Error in creation, key : %d", key);
         perror(errtxt);
-        exit(-1);
+        raise(SIGINT);
     }
     return msgq_id;
 }
@@ -97,6 +105,35 @@ msg_t recieveMessage(int msgq_id, long typ) {
     }
 
     return recieved_message;
+}
+
+/**
+ * @brief Get the Msg Count in the given message queue
+ * 
+ * @param msq_id 
+ * @return number of messages
+ */
+int getMsgCount(int msq_id) {
+    struct msqid_ds buf;
+    if (msgctl(msq_id, IPC_STAT, &buf) == -1) {
+        perror("Cannot get number of messages in msq");
+        raise(SIGINT);
+    }
+    return buf.msg_qnum;
+}
+
+/**
+ * @brief Delete MSQ
+ * 
+ * @param msgq_id 
+ */
+void deleteMsq(int msgq_id) {
+    if (msgctl(msgq_id, IPC_RMID, NULL) == -1) {
+		perror("Message queue could not be deleted.");
+		raise(SIGINT);
+	}
+
+	printf("Message queue was deleted.\n");
 }
 //======= begin msq functions =================
 
@@ -205,15 +242,38 @@ int getSem(int key, int create) {
         perror("Error in semget");
         exit(-1);
     }
+    return sem_id;
+}
 
+/**
+ * @brief Initialize semaphore set to some value
+ * 
+ * @param sem_id Id of sem set to init
+ * @param init_val Value to use for initialization
+ */
+void initSem(int sem_id, ushort init_val) {
+    // Init only in case of one process using
     union semun initer;
-    initer.val = 0;
+    initer.val = init_val;
     if (semctl(sem_id, 0, SETVAL, initer) == -1) {
         perror("Error in semget");
-        exit(-1);
+        raise(SIGINT);
     }
+}
 
-    return sem_id;
+/**
+ * @brief Get pid of last process did a successful semop
+ * 
+ * @param sem_id ID of semaphore set involved
+ * @return pid of the process
+ */
+pid_t getSemPID(int sem_id) {
+    pid_t p = semctl(sem_id, 0, GETPID);
+    if (p == -1) {
+        perror("Error in semctl GETPID");
+        raise(SIGINT);
+    }
+    return p;
 }
 
 /**
@@ -227,7 +287,7 @@ int down(int sem_set_id) {
 
     p_op.sem_num = 0;
     p_op.sem_op = -1;
-    p_op.sem_flg = IPC_NOWAIT;
+    p_op.sem_flg = !IPC_NOWAIT;
 
     return semop(sem_set_id, &p_op, 1);
 }
@@ -243,7 +303,7 @@ int up(int sem_set_id) {
 
     v_op.sem_num = 0;
     v_op.sem_op = 1;
-    v_op.sem_flg = IPC_NOWAIT;
+    v_op.sem_flg = !IPC_NOWAIT;
 
     // TODO :: Make it blocking if necessary
     return semop(sem_set_id, &v_op, 1);
